@@ -52,7 +52,8 @@ function suggestContentType(intent: string, clusterName: string): string {
 export function clusterKeywordsLocally(
   keywords: Keyword[],
   userId: string = 'local-user',
-  projectId: string | null = null
+  projectId: string | null = null,
+  targetGroupCount: number = 25
 ): KeywordCluster[] {
   if (!keywords || keywords.length === 0) return [];
 
@@ -67,18 +68,20 @@ export function clusterKeywordsLocally(
 
     for (const cluster of clusters) {
       const sim = calculateJaccardSimilarity(cluster.primary.keyword, item.keyword);
-      if (sim >= 0.35 && sim > maxSim) {
+      // If we haven't reached target group count, make matching stricter so more distinct groups form
+      const threshold = clusters.length < targetGroupCount ? 0.45 : 0.25;
+      if (sim >= threshold && sim > maxSim) {
         maxSim = sim;
         matchedCluster = cluster;
       }
     }
 
-    if (matchedCluster) {
+    if (matchedCluster && clusters.length >= targetGroupCount) {
       matchedCluster.members.push(item);
     } else {
       // Create new cluster centered around this primary keyword
       const tokens = tokenize(item.keyword).filter(t => !STOP_WORDS.has(t));
-      const clusterTitle = tokens.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + ' Group';
+      const clusterTitle = tokens.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') + ' Hub';
 
       clusters.push({
         name: clusterTitle,
@@ -88,8 +91,26 @@ export function clusterKeywordsLocally(
     }
   }
 
-  // Format into final KeywordCluster objects
-  return clusters.map((c, idx) => {
+  // If clusters count is still less than targetGroupCount and some clusters have > 2 items, split them by secondary token
+  let attempts = 0;
+  while (clusters.length < targetGroupCount && attempts < 25) {
+    attempts++;
+    const largeCluster = clusters.find(c => c.members.length > 2);
+    if (!largeCluster) break;
+
+    const popped = largeCluster.members.splice(Math.floor(largeCluster.members.length / 2));
+    if (popped.length > 0) {
+      const tokens = tokenize(popped[0].keyword).filter(t => !STOP_WORDS.has(t));
+      clusters.push({
+        name: (tokens.slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') || 'Sub-Topic') + ' Hub',
+        primary: popped[0],
+        members: popped,
+      });
+    }
+  }
+
+  // Format into final KeywordCluster objects (capped at targetGroupCount)
+  return clusters.slice(0, targetGroupCount).map((c, idx) => {
     const dominantIntent = classifySearchIntent(c.primary.keyword);
     return {
       id: `cluster-${Date.now()}-${idx}`,

@@ -28,6 +28,7 @@ export default function KeywordGroupingPage() {
   const [mode, setMode] = useState<'seed' | 'custom'>('seed');
   const [groupingMethod, setGroupingMethod] = useState<'semantic' | 'intent' | 'modifier'>('semantic');
   const [selectedLang, setSelectedLang] = useState('en');
+  const [targetGroupCount, setTargetGroupCount] = useState<number>(25);
   const [clusters, setClusters] = useState<KeywordCluster[]>([]);
   const [editingClusterId, setEditingClusterId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -103,8 +104,8 @@ export default function KeywordGroupingPage() {
           updated_at: new Date().toISOString(),
         }));
     } else {
-      // Default to semantic clustering
-      generated = clusterKeywordsLocally(rawKeywords);
+      // Default to semantic clustering with target group count
+      generated = clusterKeywordsLocally(rawKeywords, 'local-user', null, targetGroupCount);
     }
 
     setClusters(generated);
@@ -249,6 +250,21 @@ export default function KeywordGroupingPage() {
                 >
                   <option value="semantic">Semantic Topic Overlap</option>
                   <option value="intent">Search Intent (Transactional/Commercial)</option>
+                </select>
+              </div>
+
+              {/* Number of Groups (Default 25 Groups) */}
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-slate-500 font-medium">Target Groups:</label>
+                <select
+                  value={targetGroupCount}
+                  onChange={(e) => setTargetGroupCount(Number(e.target.value))}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-medium text-slate-800 dark:text-slate-200"
+                >
+                  <option value={25}>25 Groups (Full 25 Hubs)</option>
+                  <option value={20}>20 Groups</option>
+                  <option value={15}>15 Groups</option>
+                  <option value={10}>10 Groups</option>
                 </select>
               </div>
             </div>

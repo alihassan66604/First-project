@@ -523,6 +523,8 @@ export default function KeywordResearchPage() {
                   onChange={(e) => setTargetCount(Number(e.target.value))}
                   className="w-full pl-9 pr-6 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-medium cursor-pointer"
                 >
+                  <option value={5000}>5,000 Keywords (Full 5K Mega)</option>
+                  <option value={2500}>2,500 Keywords</option>
                   <option value={1000}>1,000 Keywords (Full 1K)</option>
                   <option value={500}>500 Keywords</option>
                   <option value={250}>250 Keywords</option>

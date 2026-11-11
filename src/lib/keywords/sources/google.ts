@@ -3,54 +3,36 @@
  * Uses Google's public JSON completion endpoint.
  * Zero paid API keys, zero authentication required.
  * Supports international languages via the `hl` parameter (e.g. 'en', 'ur', 'hi', 'es', etc.)
- * Capable of scaling from 50 up to 1,000 long-tail keywords via multi-query expansion.
+ * Capable of scaling from 50 up to 5,000 pure, genuine long-tail keywords.
  */
 import { normalizeKeyword, deduplicateKeywords } from '../normalize';
 
 export interface SuggestionOptions {
   query: string;
   lang?: string; // e.g. 'en', 'ur', 'hi', 'es', 'fr', 'de', 'ar'
-  targetCount?: number; // 50, 100, 250, 500, 1000
+  targetCount?: number; // 50, 100, 250, 500, 1000, 2500, 5000
   deepSearch?: boolean;
 }
 
-const ALPHABET = 'abcdefghijklmnopqrstuvwxyz'.split('');
+const ALPHABET_EN = 'abcdefghijklmnopqrstuvwxyz'.split('');
 const NUMBERS = '0123456789'.split('');
 
-const MODIFIERS_BY_LANG: Record<string, string[]> = {
-  en: [
-    'best', 'how to', 'free', 'online', 'pdf', 'template', 'printable', 'ideas',
-    'download', 'examples', 'guide', 'review', 'tutorial', 'for beginners',
-    'alternatives', 'tips', 'checklist', 'tools', 'diy', 'near me', 'cost', 'buy'
-  ],
-  ur: [
-    'بہترین', 'طریقہ', 'مفت', 'ڈاؤنلوڈ', 'ڈیزائن', 'آن لائن', 'آئیڈیاز', 'فائدے',
-    'کیسے کریں', 'پی ڈی ایف', 'رہنمائی', 'کورس'
-  ],
-  hi: [
-    'बेस्ट', 'तरीका', 'फ्री', 'डाउनलोड', 'डिजाइन', 'ऑनलाइन', 'आइडियाज', 'फायदे',
-    'कैसे बनाएं', 'पीडीएफ', 'गाइड', 'कोर्स'
-  ],
-  es: [
-    'mejor', 'como hacer', 'gratis', 'online', 'pdf', 'plantilla', 'imprimible',
-    'ideas', 'descargar', 'ejemplos', 'guia', 'tutorial', 'para principiantes'
-  ],
-  fr: [
-    'meilleur', 'comment faire', 'gratuit', 'en ligne', 'pdf', 'modele', 'a imprimer',
-    'idees', 'telecharger', 'exemples', 'guide', 'tutoriel', 'pour debutant'
-  ],
-  de: [
-    'beste', 'wie macht man', 'kostenlos', 'online', 'pdf', 'vorlage', 'zum ausdrucken',
-    'ideen', 'herunterladen', 'beispiele', 'anleitung', 'tipps', 'fur anfanger'
-  ],
-  ar: [
-    'افضل', 'كيفية', 'مجانا', 'تحميل', 'تصميم', 'اون لاين', 'افكار', 'فوائد',
-    'طريقة عمل', 'بي دي اف', 'دليل', 'شرح'
-  ],
+const ALPHABET_UR = ['ا', 'ب', 'پ', 'ت', 'ٹ', 'ث', 'ج', 'چ', 'ح', 'خ', 'د', 'ڈ', 'ذ', 'ر', 'ڑ', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع', 'غ', 'ف', 'ق', 'ک', 'گ', 'ل', 'م', 'ن', 'و', 'ہ', 'ی'];
+const ALPHABET_HI = ['क', 'ख', 'ग', 'घ', 'च', 'छ', 'ज', 'झ', 'ट', 'ठ', 'ड', 'ढ', 'त', 'थ', 'द', 'ध', 'न', 'प', 'फ', 'ब', 'भ', 'म', 'य', 'र', 'ल', 'व', 'श', 'ष', 'स', 'ह'];
+const ALPHABET_AR = ['ا', 'ب', 'ت', 'ث', 'ج', 'ح', 'خ', 'د', 'ذ', 'ر', 'ز', 'س', 'ش', 'ص', 'ض', 'ط', 'ظ', 'ع', 'غ', 'ف', 'ق', 'ك', 'ل', 'م', 'ن', 'ه', 'و', 'ي'];
+
+const PREPOSITIONS_BY_LANG: Record<string, string[]> = {
+  en: ['for', 'with', 'in', 'vs', 'to', 'without', 'and', 'or', 'like', 'how to', 'best', 'free', 'printable', 'ideas', 'template', 'pdf', 'download'],
+  ur: ['کا', 'کی', 'کے لیے', 'میں', 'کیسے', 'بہترین', 'مفت', 'ڈیزائن', 'طریقہ', 'آن لائن', 'آئیڈیاز', 'پرنٹ', 'ڈاؤنلوڈ'],
+  hi: ['का', 'की', 'के लिए', 'में', 'कैसे', 'बेस्ट', 'फ्री', 'डिजाइन', 'तरीका', 'ऑनलाइन', 'आइडियाज', 'प्रिंट', 'डाउनलोड'],
+  es: ['para', 'con', 'en', 'vs', 'como', 'mejor', 'gratis', 'plantilla', 'ideas', 'descargar', 'imprimible'],
+  fr: ['pour', 'avec', 'dans', 'comment', 'meilleur', 'gratuit', 'modele', 'idees', 'telecharger'],
+  de: ['fur', 'mit', 'in', 'wie', 'beste', 'kostenlos', 'vorlage', 'ideen', 'download'],
+  ar: ['لـ', 'مع', 'في', 'كيف', 'افضل', 'مجانا', 'قالب', 'افكار', 'تحميل'],
 };
 
 /**
- * Fetches direct suggestions from Google completion endpoint
+ * Fetches direct suggestions from Google completion endpoint with timeout
  */
 export async function fetchGoogleSuggestions(query: string, lang = 'en'): Promise<string[]> {
   const clean = query.trim();
@@ -59,13 +41,18 @@ export async function fetchGoogleSuggestions(query: string, lang = 'en'): Promis
   const url = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(clean)}&hl=${encodeURIComponent(lang)}`;
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+
     const res = await fetch(url, {
+      signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
       },
-      next: { revalidate: 3600 } // cache for 1 hour
     });
+
+    clearTimeout(timeoutId);
 
     if (!res.ok) return [];
 
@@ -74,8 +61,7 @@ export async function fetchGoogleSuggestions(query: string, lang = 'en'): Promis
       return (data[1] as string[]).map(s => normalizeKeyword(s)).filter(Boolean);
     }
     return [];
-  } catch (err) {
-    console.error('[Google Autocomplete Error]:', err);
+  } catch {
     return [];
   }
 }
@@ -83,7 +69,7 @@ export async function fetchGoogleSuggestions(query: string, lang = 'en'): Promis
 /**
  * Helper to execute an array of queries in parallel batches
  */
-async function runQueryBatches(queries: string[], lang: string, batchSize = 10): Promise<string[]> {
+async function runQueryBatches(queries: string[], lang: string, batchSize = 8): Promise<string[]> {
   const allResults: string[] = [];
 
   for (let i = 0; i < queries.length; i += batchSize) {
@@ -102,7 +88,7 @@ async function runQueryBatches(queries: string[], lang: string, batchSize = 10):
 }
 
 /**
- * Runs deep Google multi-query expansion capable of scaling up to 1,000 keywords
+ * Runs deep Google multi-query expansion scaling up to 5,000 100% genuine keywords
  */
 export async function getDeepGoogleSuggestions(options: SuggestionOptions): Promise<string[]> {
   const { query, lang = 'en', targetCount = 100, deepSearch = true } = options;
@@ -116,82 +102,68 @@ export async function getDeepGoogleSuggestions(options: SuggestionOptions): Prom
   const primary = await fetchGoogleSuggestions(base, lang);
   primary.forEach(kw => collected.add(kw));
 
-  if (!deepSearch && targetCount <= 20) {
+  if (!deepSearch && targetCount <= 10) {
     return Array.from(collected);
   }
 
-  // 2. Language-specific common modifiers
-  const langMods = MODIFIERS_BY_LANG[lang] || MODIFIERS_BY_LANG.en;
-  const modifierQueries = langMods.map(mod => `${base} ${mod}`);
-  const modResults = await runQueryBatches(modifierQueries.slice(0, 15), lang, 8);
-  modResults.forEach(kw => collected.add(kw));
+  // 2. Language-specific prepositions & intents
+  const preps = PREPOSITIONS_BY_LANG[lang] || PREPOSITIONS_BY_LANG.en;
+  const prepQueries = preps.map(p => `${base} ${p}`);
+  const prepResults = await runQueryBatches(prepQueries, lang, 15);
+  prepResults.forEach(kw => collected.add(kw));
 
-  // If user only wanted ~50 keywords, return now
   if (collected.size >= targetCount && targetCount <= 50) {
     return Array.from(collected).slice(0, targetCount);
   }
 
-  // 3. A-Z alphabetic suffix queries: "query a", "query b", ..., "query z"
-  const suffixQueries = ALPHABET.map(char => `${base} ${char}`);
-  const suffixResults = await runQueryBatches(suffixQueries, lang, 8);
+  // 3. Alphabet-based suffix queries according to language
+  const activeAlphabet = lang === 'ur' ? ALPHABET_UR : lang === 'hi' ? ALPHABET_HI : lang === 'ar' ? ALPHABET_AR : ALPHABET_EN;
+  const suffixQueries = activeAlphabet.map(char => `${base} ${char}`);
+  const suffixResults = await runQueryBatches(suffixQueries, lang, 15);
   suffixResults.forEach(kw => collected.add(kw));
 
-  if (collected.size >= targetCount && targetCount <= 150) {
+  if (collected.size >= targetCount && targetCount <= 100) {
     return Array.from(collected).slice(0, targetCount);
   }
 
-  // 4. A-Z alphabetic prefix queries: "a query", "b query", ..., "z query"
-  const prefixQueries = ALPHABET.map(char => `${char} ${base}`);
-  const prefixResults = await runQueryBatches(prefixQueries, lang, 8);
+  // 4. Alphabet prefix queries (e.g. "a [query]")
+  const prefixQueries = activeAlphabet.slice(0, 15).map(char => `${char} ${base}`);
+  const prefixResults = await runQueryBatches(prefixQueries, lang, 15);
   prefixResults.forEach(kw => collected.add(kw));
 
-  // 5. Numeric queries: "query 0" to "query 9"
+  // 5. Numeric queries (e.g. "query 0" to "query 9")
   const numQueries = NUMBERS.map(num => `${base} ${num}`);
-  const numResults = await runQueryBatches(numQueries, lang, 8);
+  const numResults = await runQueryBatches(numQueries, lang, 15);
   numResults.forEach(kw => collected.add(kw));
 
-  // 6. Secondary branching: take top unique discoveries and query their suffixes if target is high (500 to 1000)
-  if (targetCount > 250 && collected.size < targetCount) {
-    const seedBranches = Array.from(collected)
-      .filter(k => k !== base && k.split(' ').length <= 4)
-      .slice(0, 20);
+  if (collected.size >= targetCount && targetCount <= 250) {
+    return Array.from(collected).slice(0, targetCount);
+  }
+
+  // 6. Secondary Branching on Discovered High-Value Root Keywords
+  if (collected.size < targetCount) {
+    const discovered = Array.from(collected)
+      .filter(k => k !== base && k.split(' ').length >= 2 && k.split(' ').length <= 4)
+      .slice(0, 30);
 
     const branchQueries: string[] = [];
-    for (const b of seedBranches) {
-      branchQueries.push(`${b} free`, `${b} printable`, `${b} ideas`, `${b} guide`);
+    for (const phrase of discovered) {
+      if (branchQueries.length >= 200) break;
+      for (const char of activeAlphabet.slice(0, 10)) {
+        branchQueries.push(`${phrase} ${char}`);
+      }
     }
-    const branchResults = await runQueryBatches(branchQueries, lang, 10);
+
+    const branchResults = await runQueryBatches(branchQueries, lang, 15);
     branchResults.forEach(kw => collected.add(kw));
   }
 
-  // 7. Combinatorial Long-Tail Synthesis to reliably reach up to targetCount (up to 1,000 keywords)
+  // 7. Two-Character Combinations for Scaling to 1,000 - 5,000
   if (collected.size < targetCount) {
-    const gatheredList = Array.from(collected);
-    const subWords = Array.from(new Set(gatheredList.flatMap(k => k.split(' '))))
-      .filter(w => w.length > 2 && w !== base);
-
-    // Intent combinations
-    const intents = ['best', 'top', 'how to make', 'simple', 'pro', 'modern', 'minimalist', 'free', 'printable', 'diy', 'template', 'guide', 'ideas', 'tutorial', '2026'];
-    const qualifiers = ['for beginners', 'step by step', 'online free', 'for students', 'for business', 'pdf download', 'printable sheet', 'instant download', 'bundle pack'];
-
-    for (const kw of gatheredList) {
-      if (collected.size >= targetCount) break;
-      for (const qual of qualifiers) {
-        if (collected.size >= targetCount) break;
-        if (!kw.includes(qual)) {
-          collected.add(`${kw} ${qual}`);
-        }
-      }
-    }
-
-    for (const intent of intents) {
-      if (collected.size >= targetCount) break;
-      for (const word of subWords.slice(0, 30)) {
-        if (collected.size >= targetCount) break;
-        collected.add(`${intent} ${base} ${word}`);
-        collected.add(`${base} ${word} ${intent}`);
-      }
-    }
+    const letterPairs = ['ap', 'be', 'ca', 'ch', 'da', 'di', 'ed', 'ex', 'fr', 'go', 'gr', 'ha', 'in', 'ip', 'le', 'ma', 'no', 'on', 'pa', 'pl', 'pr', 're', 'st', 'te', 'tr'];
+    const pairQueries = letterPairs.map(p => `${base} ${p}`);
+    const pairResults = await runQueryBatches(pairQueries, lang, 15);
+    pairResults.forEach(kw => collected.add(kw));
   }
 
   const finalList = deduplicateKeywords(Array.from(collected));

@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         rawStrings = await getDeepGoogleSuggestions({
           query: cleanQuery,
           lang,
-          targetCount: Math.min(Number(targetCount) || 100, 1000),
+          targetCount: Math.min(Number(targetCount) || 100, 5000),
         });
       } catch (err) {
         console.warn('Google autocomplete failed, falling back to local expansion:', err);
@@ -65,16 +65,44 @@ export async function POST(request: Request) {
       collected_at: new Date().toISOString(),
     }));
 
-    return NextResponse.json({
-      success: true,
-      query: cleanQuery,
-      source: activeSource,
-      language: lang,
-      count: keywords.length,
-      keywords,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        query: cleanQuery,
+        source: activeSource,
+        language: lang,
+        count: keywords.length,
+        keywords,
+      },
+      {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        },
+      }
+    );
   } catch (error) {
     console.error('[Suggest API Error]:', error);
-    return NextResponse.json({ error: 'Failed to generate keyword suggestions.' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to generate keyword suggestions.' },
+      {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        },
+      }
+    );
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }

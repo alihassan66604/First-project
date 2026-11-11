@@ -16,7 +16,7 @@ export type AccessDecision =
   | { action: 'unauthorized' };
 
 const PUBLIC_PAGES = ['/login', '/signup'];
-const PUBLIC_APIS = ['/api/auth/login', '/api/auth/logout'];
+const PUBLIC_APIS = ['/api/auth/login', '/api/auth/logout', '/api/keywords/suggest'];
 
 const ROLE_HOME: Record<UserRole, string> = { owner: '/owner', office: '/office', user: '/dashboard' };
 
